@@ -1,0 +1,64 @@
+name: DevSecOps Security CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 2 * * 1"   # Every Monday at 2am UTC
+
+jobs:
+  # ── Gitleaks — Secret Detection ─────────────────────────────────────────────
+  gitleaks:
+    name: Gitleaks — Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Trivy — Container & Filesystem Security ──────────────────────────────────
+  trivy-fs:
+    name: Trivy — Filesystem Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy (filesystem)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          format: "table"
+          severity: "CRITICAL,HIGH"
+          exit-code: "0"   # Don't fail CI; set to 1 to block on vuln
+
+  # ── Checkov — IaC Misconfig Scanner ──────────────────────────────────────────
+  checkov:
+    name: Checkov — IaC Policy Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: scripts/
+          soft_fail: true
+
+  # ── ShellCheck — Shell Script Linting ────────────────────────────────────────
+  shellcheck:
+    name: ShellCheck — Shell Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run ShellCheck on all scripts
+        run: |
+          find scripts/ -name "*.sh" -exec shellcheck {} \; || true
